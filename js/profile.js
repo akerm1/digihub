@@ -1,22 +1,10 @@
-import { auth, db } from './js/firebase.js';
+// Import all required Firebase modules from ONE source
+import { auth, db, doc, getDoc, setDoc, collection, query, where, getDocs, addDoc } from './firebase.js';
 import {
     onAuthStateChanged,
     sendPasswordResetEmail,
     signOut
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
-import {
-    doc,
-    getDoc,
-    setDoc,
-    collection,
-    query,
-    where,
-    getDocs
-} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-
-// Debug imports
-console.log('Imported auth:', auth);
-console.log('Imported db:', db);
 
 // Initialize AOS animations
 AOS.init({
@@ -138,11 +126,9 @@ function animateCounter(element, target, duration = 2000) {
 
 // Check authentication state
 onAuthStateChanged(auth, async (user) => {
-    console.log('Auth state:', user ? { uid: user.uid, email: user.email } : 'No user');
     if (user) {
         try {
             await user.getIdToken(); // Verify token
-            console.log('User token valid');
             await loadProfileData(user);
             await loadPurchaseHistory(user.uid);
             initializeProfileAnimations();
@@ -161,102 +147,141 @@ onAuthStateChanged(auth, async (user) => {
     }
 });
 
-// Load profile data
+// Load profile data with enhanced safety
 async function loadProfileData(user) {
     try {
-        if (!profileNameElement || !profileEmailElement || !userNameElement) {
-            throw new Error('Missing DOM elements for profile data');
-        }
-        if (!db) {
-            throw new Error('Firestore database instance is not initialized');
-        }
-        console.log('Using Firestore instance for profile:', db);
         profileNameElement.innerHTML = '<div class="loading-shimmer" style="height: 2rem; border-radius: 4px;"></div>';
+        if (!db) {
+            throw new Error('Firestore not initialized. Check firebase.js');
+        }
+
         const userDoc = await getDoc(doc(db, "users", user.uid));
-        console.log('User Doc:', userDoc.exists(), userDoc.data());
         let userData = {};
         if (userDoc.exists()) {
             userData = userDoc.data();
         } else {
             userData = {
+                name: user.email.split('@')[0],
                 email: user.email,
-                createdAt: new Date(),
-                name: user.displayName || user.email.split('@')[0]
+                createdAt: new Date()
             };
             await setDoc(doc(db, "users", user.uid), userData);
-            console.log('Created new user document for:', user.uid);
         }
+
         setTimeout(() => {
             const displayName = userData.name || user.email.split('@')[0];
             profileNameElement.textContent = displayName;
             profileEmailElement.innerHTML = `<i class="fas fa-envelope"></i> ${user.email}`;
-            userNameElement.textContent = displayName;
-            if (userData.createdAt) {
-                const memberSinceDate = userData.createdAt.toDate ? 
-                    userData.createdAt.toDate() : new Date(userData.createdAt);
-                memberSinceElement.textContent = memberSinceDate.toLocaleDateString('en-US', {
-                    year: 'numeric',
-                    month: 'short'
-                });
+            if (userNameElement) {
+                userNameElement.textContent = displayName;
             }
+
+            // SAFELY handle createdAt — works with Timestamp, Date, or string
+            let memberSinceDate = new Date();
+            if (userData.createdAt) {
+                if (typeof userData.createdAt.toDate === 'function') {
+                    // Firestore Timestamp
+                    memberSinceDate = userData.createdAt.toDate();
+                } else if (userData.createdAt instanceof Date) {
+                    // JavaScript Date object
+                    memberSinceDate = userData.createdAt;
+                } else if (typeof userData.createdAt === 'string') {
+                    // ISO string format
+                    memberSinceDate = new Date(userData.createdAt);
+                }
+            }
+
+            memberSinceElement.textContent = memberSinceDate.toLocaleDateString('en-US', {
+                year: 'numeric',
+                month: 'short'
+            });
+
             const emailHash = btoa(user.email).replace(/[^a-zA-Z0-9]/g, '');
-            profileAvatarElement.src = `https://www.gravatar.com/avatar/${emailHash}?d=identicon&s=180`;
+            const avatarUrl = `https://www.gravatar.com/avatar/${emailHash}?d=identicon&s=180`;
+            profileAvatarElement.src = avatarUrl;
             if (userAvatarElement) {
                 userAvatarElement.src = `https://www.gravatar.com/avatar/${emailHash}?d=identicon&s=32`;
             }
+
             const totalSaved = Math.floor(Math.random() * 500) + 100;
             animateCounter(totalSavedElement, totalSaved, 1500);
         }, 500);
+
     } catch (error) {
-        console.error("Error loading profile data:", error.code, error.message);
-        showNotification(`Error loading profile data: ${error.message}`, 'error');
+        console.error("Error loading profile ", {
+            message: error.message,
+            code: error.code,
+            userId: user?.uid
+        });
+        let errorMessage = 'Error loading profile data';
+        if (error.code === 'permission-denied') {
+            errorMessage = 'Permission denied. Check Firestore rules.';
+        } else if (error.code === 'unavailable') {
+            errorMessage = 'Firestore unavailable. Check connection.';
+        }
+        showNotification(errorMessage, 'error');
+        profileNameElement.textContent = user.email.split('@')[0];
+        profileEmailElement.innerHTML = `<i class="fas fa-envelope"></i> ${user.email}`;
     }
 }
 
-// Load purchase history
+// Load purchase history with safe date parsing
 async function loadPurchaseHistory(userId) {
     try {
         if (!db) {
-            throw new Error('Firestore database instance is not initialized');
+            throw new Error('Firestore not initialized');
         }
-        console.log('Using Firestore instance:', db);
+
         const purchasesRef = collection(db, "purchases");
         const q = query(purchasesRef, where("userId", "==", userId));
         const querySnapshot = await getDocs(q);
-        console.log('Purchases:', querySnapshot.size, querySnapshot.docs.map(doc => doc.data()));
+
         purchasesListElement.innerHTML = '';
         if (querySnapshot.empty) {
             noPurchasesElement.style.display = 'flex';
             animateCounter(purchaseCountElement, 0, 1000);
             return;
         }
+
         noPurchasesElement.style.display = 'none';
         animateCounter(purchaseCountElement, querySnapshot.size, 1500);
+
         querySnapshot.forEach((doc, index) => {
             const purchase = doc.data();
-            purchase.orderId = purchase.orderId || 'N/A';
-            purchase.price = purchase.price || '0.00';
-            purchase.status = purchase.status || 'pending';
-            purchase.accountDetails = purchase.accountDetails || { email: 'N/A', password: 'N/A' };
-            purchase.purchaseDate = purchase.purchaseDate || new Date();
             const purchaseCard = createEnhancedPurchaseCard(purchase, index);
             purchasesListElement.appendChild(purchaseCard);
         });
+
     } catch (error) {
-        console.error("Error loading purchase history:", error.code, error.message);
-        showNotification(`Error loading purchase history: ${error.message}`, 'error');
+        console.error("🔥 FIRESTORE ERROR DETAILS:", {
+            code: error.code,
+            message: error.message,
+            stack: error.stack
+        });
+        showNotification('Error loading purchase history: ' + (error.message || 'Unknown error'), 'error');
     }
 }
 
-// Create enhanced purchase card
+// Create enhanced purchase card with safe date handling
 function createEnhancedPurchaseCard(purchase, index) {
     const card = document.createElement('div');
     card.className = 'purchase-card';
     card.style.setProperty('--delay', `${index * 0.1}s`);
     card.setAttribute('data-aos', 'fade-up');
     card.setAttribute('data-aos-delay', index * 100);
-    const purchaseDate = purchase.purchaseDate?.toDate ? 
-        purchase.purchaseDate.toDate() : new Date(purchase.purchaseDate || Date.now());
+
+    // SAFELY parse purchaseDate — supports Timestamp, Date, or string
+    let purchaseDate = new Date();
+    if (purchase.purchaseDate) {
+        if (typeof purchase.purchaseDate.toDate === 'function') {
+            purchaseDate = purchase.purchaseDate.toDate();
+        } else if (purchase.purchaseDate instanceof Date) {
+            purchaseDate = purchase.purchaseDate;
+        } else if (typeof purchase.purchaseDate === 'string') {
+            purchaseDate = new Date(purchase.purchaseDate);
+        }
+    }
+
     const formattedDate = purchaseDate.toLocaleDateString('en-US', {
         year: 'numeric',
         month: 'short',
@@ -264,7 +289,9 @@ function createEnhancedPurchaseCard(purchase, index) {
         hour: '2-digit',
         minute: '2-digit'
     });
+
     const productDetails = getEnhancedProductDetails(purchase.productId || 'default');
+
     card.innerHTML = `
         <div class="purchase-header">
             <div class="purchase-product">
@@ -377,8 +404,7 @@ function getEnhancedProductDetails(productId) {
 window.copyToClipboard = function(text) {
     navigator.clipboard.writeText(text).then(() => {
         showNotification('Copied to clipboard!', 'success');
-    }).catch((error) => {
-        console.error('Clipboard error:', error);
+    }).catch(() => {
         const textArea = document.createElement('textarea');
         textArea.value = text;
         document.body.appendChild(textArea);
@@ -465,16 +491,6 @@ function createRippleEffect(e) {
     setTimeout(() => ripple.remove(), 600);
 }
 
-// Ripple animation keyframes
-const rippleStyle = document.createElement('style');
-rippleStyle.textContent = `
-    @keyframes ripple {
-        0% { transform: scale(0); opacity: 0.6; }
-        100% { transform: scale(1); opacity: 0; }
-    }
-`;
-document.head.appendChild(rippleStyle);
-
 // Button event handlers
 if (changePasswordButton) {
     changePasswordButton.addEventListener('click', async () => {
@@ -489,11 +505,17 @@ if (changePasswordButton) {
             await sendPasswordResetEmail(auth, user.email);
             showNotification('Password reset email sent! Check your inbox.', 'success');
         } catch (error) {
-            console.error("Error sending password reset email:", error.code, error.message);
-            showNotification(`Error: ${error.message || 'Failed to send reset email'}`, 'error');
+            console.error("Error sending password reset email:", error);
+            let errorMessage = 'Failed to send reset email. Please try again.';
+            if (error.code === 'auth/invalid-email') {
+                errorMessage = 'Invalid email address.';
+            } else if (error.code === 'auth/user-not-found') {
+                errorMessage = 'User not found.';
+            }
+            showNotification(errorMessage, 'error');
         } finally {
             setTimeout(() => {
-                changePasswordButton.innerHTML = '<i class="fas fa-key"></i> <span>Change Password</span>';
+                changePasswordButton.innerHTML = '<i class="fas fa-key"></i> <span>Change Password</span> <div class="action-description">Reset your account password</div>';
                 changePasswordButton.disabled = false;
             }, 1000);
         }
@@ -501,8 +523,23 @@ if (changePasswordButton) {
 }
 
 if (editProfileButton) {
-    editProfileButton.addEventListener('click', () => {
-        showNotification('Profile editing feature coming soon!', 'info');
+    editProfileButton.addEventListener('click', async () => {
+        const user = auth.currentUser;
+        if (!user) {
+            showNotification('Please login to edit profile', 'error');
+            return;
+        }
+        const newName = prompt('Enter your new name:', profileNameElement.textContent);
+        if (newName && newName.trim()) {
+            try {
+                await setDoc(doc(db, "users", user.uid), { name: newName.trim() }, { merge: true });
+                showNotification('Profile updated successfully!', 'success');
+                await loadProfileData(user);
+            } catch (error) {
+                console.error("Error updating profile:", error);
+                showNotification('Error updating profile', 'error');
+            }
+        }
     });
 }
 
@@ -512,8 +549,10 @@ if (downloadDataButton) {
         downloadDataButton.disabled = true;
         setTimeout(() => {
             showNotification('Data export prepared! Download started.', 'success');
-            downloadDataButton.innerHTML = '<i class="fas fa-download"></i> <span>Download Data</span>';
-            downloadDataButton.disabled = false;
+            setTimeout(() => {
+                downloadDataButton.innerHTML = '<i class="fas fa-download"></i> <span>Download Data</span> <div class="action-description">Export your account data</div>';
+                downloadDataButton.disabled = false;
+            }, 2000);
         }, 2000);
     });
 }
@@ -531,15 +570,15 @@ if (signOutButton) {
                 window.location.href = 'index.html';
             }, 500);
         } catch (error) {
-            console.error("Error signing out:", error.code, error.message);
-            showNotification(`Error: ${error.message || 'Failed to sign out'}`, 'error');
-            signOutButton.innerHTML = '<i class="fas fa-sign-out-alt"></i> <span>Sign Out</span>';
+            console.error("Error signing out:", error);
+            showNotification('Error signing out. Please try again.', 'error');
+            signOutButton.innerHTML = '<i class="fas fa-sign-out-alt"></i> <span>Sign Out</span> <div class="action-description">Logout from your account</div>';
             signOutButton.disabled = false;
         }
     });
 }
 
-// Smooth scrolling for anchor links
+// Add smooth scrolling to anchor links
 document.querySelectorAll('a[href^="#"]').forEach(anchor => {
     anchor.addEventListener('click', function (e) {
         e.preventDefault();
@@ -553,7 +592,7 @@ document.querySelectorAll('a[href^="#"]').forEach(anchor => {
     });
 });
 
-// Intersection observer for scroll animations
+// Add intersection observer for scroll animations
 const observerOptions = {
     threshold: 0.1,
     rootMargin: '0px 0px -50px 0px'
@@ -576,7 +615,7 @@ document.querySelectorAll('.stat-item, .purchase-card, .action-btn').forEach(el 
     observer.observe(el);
 });
 
-// Keyboard navigation
+// Add keyboard navigation support
 document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {
         navToggle.classList.remove('active');
@@ -602,6 +641,7 @@ document.querySelectorAll('img[data-src]').forEach(img => {
 });
 
 // Resize handler
+window.lastWidth = window.innerWidth;
 let resizeTimer;
 window.addEventListener('resize', () => {
     clearTimeout(resizeTimer);
@@ -614,7 +654,6 @@ window.addEventListener('resize', () => {
         }
     }, 250);
 });
-window.lastWidth = window.innerWidth;
 
 // Network status
 window.addEventListener('online', () => {
@@ -631,16 +670,15 @@ window.addEventListener('load', () => {
     main.style.animation = 'fadeInUp 0.8s ease-out';
 });
 
-// Additional styles (minimal for functionality)
+// Additional styles
 const additionalStyles = document.createElement('style');
 additionalStyles.textContent = `
-    body {
-        opacity: 0;
-        transition: opacity 0.3s ease-in-out;
+    @keyframes ripple {
+        0% { transform: scale(0); opacity: 0.6; }
+        100% { transform: scale(1); opacity: 0; }
     }
-    .fade-in {
-        animation: fadeInUp 0.6s ease-out forwards;
-    }
+    body { opacity: 0; transition: opacity 0.3s ease-in-out; }
+    .fade-in { animation: fadeInUp 0.6s ease-out forwards; }
     .loading-shimmer {
         background: linear-gradient(90deg, 
             rgba(255,255,255,0.1) 0%, 
@@ -654,14 +692,34 @@ additionalStyles.textContent = `
         100% { background-position: 200% 0; }
     }
     @keyframes fadeInUp {
-        from {
-            opacity: 0;
-            transform: translateY(20px);
+        from { opacity: 0; transform: translateY(20px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+    .action-btn .action-description {
+        font-size: 0.75rem;
+        color: var(--text-muted);
+        margin-top: 0.25rem;
+        opacity: 0.8;
+    }
+    .cta-buttons { margin-top: var(--space-lg); }
+    .purchase-card:nth-child(even) { animation-delay: 0.1s; }
+    .purchase-card:nth-child(odd) { animation-delay: 0.2s; }
+    @media (prefers-reduced-motion: reduce) {
+        *, *::before, *::after {
+            animation-duration: 0.01ms !important;
+            animation-iteration-count: 1 !important;
+            transition-duration: 0.01ms !important;
         }
-        to {
-            opacity: 1;
-            transform: translateY(0);
-        }
+        .particle { display: none; }
+    }
+    .action-btn:focus-visible, .btn-action:focus-visible {
+        outline: 2px solid var(--primary);
+        outline-offset: 2px;
+        box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.2);
+    }
+    @media (prefers-contrast: high) {
+        :root { --bg-glass: rgba(255, 255, 255, 0.2); --text-secondary: #ffffff; }
+        .purchase-card, .action-btn { border: 2px solid; }
     }
 `;
 document.head.appendChild(additionalStyles);
