@@ -133,5 +133,9 @@ function showNotification(message, type) {
     }, 4000);
 }
 
+
+
+
+
 // Export for use in other modules
 export { showNotification };
