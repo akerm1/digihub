@@ -744,15 +744,25 @@
         });
 
         // Loading screen
-        window.addEventListener('load', function() {
-            const loadingScreen = document.getElementById('loadingScreen');
-            setTimeout(() => {
-                loadingScreen.style.opacity = '0';
-                setTimeout(() => {
-                    loadingScreen.style.display = 'none';
-                }, 500);
-            }, 2000);
-        });
+ // Replace your existing window.onload loading screen logic with this:
+document.addEventListener('DOMContentLoaded', () => {
+    const loadingScreen = document.getElementById('loadingScreen');
+    
+    // Hide immediately if DOM is ready — no artificial delay
+    setTimeout(() => {
+        loadingScreen.style.opacity = '0';
+        setTimeout(() => {
+            loadingScreen.style.display = 'none';
+        }, 500);
+    }, 300); // Only wait 300ms max — enough for CSS transitions, not data
+});
+
+// Also ensure the loading screen starts visible
+document.body.insertAdjacentHTML('afterbegin', `
+    <style>
+        #loadingScreen { opacity: 1; }
+    </style>
+`);
 
         // Navbar scroll effect
         const navbar = document.getElementById('navbar');
