@@ -1027,6 +1027,24 @@
             el.style.transition = 'all 0.6s ease';
             revealObserver.observe(el);
         });
+
+
+
+
+
+
+document.addEventListener('DOMContentLoaded', function() {
+    const navToggle = document.querySelector('.nav-toggle');
+    const navLinks = document.querySelector('.nav-links');
+
+    if (navToggle && navLinks) {
+        navToggle.addEventListener('click', function() {
+            navToggle.classList.toggle('active');
+            navLinks.classList.toggle('active');
+        });
+    }
+});
+
     </script>
 </body>
 </html>
