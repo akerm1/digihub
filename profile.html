@@ -13,6 +13,7 @@
 <body>
     <!-- Background particles -->
     <div class="background-particles" id="particles"></div>
+
     <!-- Navigation -->
     <nav class="navbar" id="navbar">
         <div class="nav-container">
@@ -38,6 +39,7 @@
             </div>
         </div>
     </nav>
+
     <!-- Profile Header -->
     <section class="profile-header">
         <div class="profile-container" data-aos="fade-up">
@@ -74,14 +76,11 @@
                         <h3 id="member-since">-</h3>
                         <p><i class="fas fa-calendar-alt"></i> Member Since</p>
                     </div>
-                    <div class="stat-item">
-                        <h3 id="total-saved">$0</h3>
-                        <p><i class="fas fa-piggy-bank"></i> Total Saved</p>
-                    </div>
                 </div>
             </div>
         </div>
     </section>
+
     <!-- Profile Actions -->
     <section class="profile-actions">
         <div class="actions-container" data-aos="fade-up">
@@ -95,11 +94,6 @@
                 <span>Edit Profile</span>
                 <div class="action-description">Update your profile information</div>
             </button>
-            <button id="download-data" class="action-btn interactive-hover">
-                <i class="fas fa-download"></i>
-                <span>Download Data</span>
-                <div class="action-description">Export your account data</div>
-            </button>
             <button id="sign-out" class="action-btn sign-out interactive-hover">
                 <i class="fas fa-sign-out-alt"></i>
                 <span>Sign Out</span>
@@ -107,14 +101,13 @@
             </button>
         </div>
     </section>
+
     <!-- Purchases Section -->
     <section class="purchases-section">
         <div class="section-header" data-aos="fade-up">
-            <h2>My <span>Purchases</span></h2>
             <p>Access and manage your purchased digital products and subscriptions</p>
         </div>
         <div class="purchases-container" id="purchases-list">
-            <!-- Purchases will be dynamically loaded here -->
             <div class="no-purchases" id="no-purchases">
                 <i class="fas fa-shopping-bag"></i>
                 <h3>No Purchases Yet</h3>
@@ -128,6 +121,17 @@
             </div>
         </div>
     </section>
+
+    <!-- Attention Notice -->
+    <section class="attention-notice">
+        <div class="notice-container">
+            <i class="fas fa-exclamation-triangle"></i>
+            <strong>If you encounter any issues with your purchased product,</strong>
+            please contact our support team immediately for assistance.
+            <a href="contact.html" class="notice-link">Contact Us →</a>
+        </div>
+    </section>
+
     <!-- Footer -->
     <footer class="footer">
         <div class="footer-container">

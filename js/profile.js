@@ -1,4 +1,4 @@
-// Import all required Firebase modules from ONE source
+// Import all required Firebase modules from ONE source (v10.12.2)
 import { auth, db, doc, getDoc, setDoc, collection, query, where, getDocs, addDoc } from './firebase.js';
 import {
     onAuthStateChanged,
@@ -6,15 +6,17 @@ import {
     signOut
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 
-// Initialize AOS animations
-AOS.init({
-    duration: 800,
-    easing: 'ease-in-out',
-    once: true,
-    offset: 100
-});
+// Initialize AOS animations only if available
+if (typeof AOS !== 'undefined') {
+    AOS.init({
+        duration: 800,
+        easing: 'ease-in-out',
+        once: true,
+        offset: 100
+    });
+}
 
-// DOM Elements
+// DOM Elements — ALL GUARDED FOR SAFETY
 const profileNameElement = document.getElementById('profile-name');
 const profileEmailElement = document.getElementById('profile-email');
 const profileAvatarElement = document.getElementById('profile-avatar');
@@ -22,7 +24,7 @@ const userNameElement = document.querySelector('.user-name');
 const userAvatarElement = document.querySelector('.user-avatar');
 const purchaseCountElement = document.getElementById('purchase-count');
 const memberSinceElement = document.getElementById('member-since');
-const totalSavedElement = document.getElementById('total-saved');
+const totalSavedElement = document.getElementById('total-saved'); // Still exists but unused — we'll leave it for safety
 const changePasswordButton = document.getElementById('change-password');
 const editProfileButton = document.getElementById('edit-profile');
 const downloadDataButton = document.getElementById('download-data');
@@ -44,9 +46,10 @@ window.addEventListener('unhandledrejection', (event) => {
     showNotification(`Error: ${event.reason?.message || 'Unexpected error'}`, 'error');
 });
 
-// Initialize particles
+// Initialize particles safely
 function createParticles() {
     const particlesContainer = document.getElementById('particles');
+    if (!particlesContainer) return;
     const particleCount = 50;
     for (let i = 0; i < particleCount; i++) {
         const particle = document.createElement('div');
@@ -69,27 +72,30 @@ function createParticles() {
 }
 
 // Navbar scroll effect
-window.addEventListener('scroll', () => {
-    if (window.scrollY > 100) {
-        navbar.classList.add('scrolled');
-    } else {
-        navbar.classList.remove('scrolled');
-    }
-});
+if (navbar) {
+    window.addEventListener('scroll', () => {
+        if (window.scrollY > 100) {
+            navbar.classList.add('scrolled');
+        } else {
+            navbar.classList.remove('scrolled');
+        }
+    });
+}
 
 // Mobile navigation toggle
-navToggle.addEventListener('click', () => {
-    navToggle.classList.toggle('active');
-    navLinks.classList.toggle('active');
-});
+if (navToggle && navLinks) {
+    navToggle.addEventListener('click', () => {
+        navToggle.classList.toggle('active');
+        navLinks.classList.toggle('active');
+    });
 
-// Close mobile nav when clicking on links
-navLinks.addEventListener('click', (e) => {
-    if (e.target.tagName === 'A') {
-        navToggle.classList.remove('active');
-        navLinks.classList.remove('active');
-    }
-});
+    navLinks.addEventListener('click', (e) => {
+        if (e.target.tagName === 'A') {
+            navToggle.classList.remove('active');
+            navLinks.classList.remove('active');
+        }
+    });
+}
 
 // Notification system
 function showNotification(message, type = 'info') {
@@ -111,6 +117,7 @@ function showNotification(message, type = 'info') {
 
 // Animate counter numbers
 function animateCounter(element, target, duration = 2000) {
+    if (!element) return;
     const start = 0;
     const increment = target / (duration / 16);
     let current = start;
@@ -147,14 +154,16 @@ onAuthStateChanged(auth, async (user) => {
     }
 });
 
-// Load profile data with enhanced safety
+// Load profile data with robust safety checks
 async function loadProfileData(user) {
-    try {
-        profileNameElement.innerHTML = '<div class="loading-shimmer" style="height: 2rem; border-radius: 4px;"></div>';
-        if (!db) {
-            throw new Error('Firestore not initialized. Check firebase.js');
-        }
+    if (!profileNameElement || !profileEmailElement || !db) {
+        console.error('Profile DOM elements or Firestore not available');
+        return;
+    }
 
+    profileNameElement.innerHTML = '<div class="loading-shimmer" style="height: 2rem; border-radius: 4px;"></div>';
+
+    try {
         const userDoc = await getDoc(doc(db, "users", user.uid));
         let userData = {};
         if (userDoc.exists()) {
@@ -172,21 +181,17 @@ async function loadProfileData(user) {
             const displayName = userData.name || user.email.split('@')[0];
             profileNameElement.textContent = displayName;
             profileEmailElement.innerHTML = `<i class="fas fa-envelope"></i> ${user.email}`;
-            if (userNameElement) {
-                userNameElement.textContent = displayName;
-            }
 
-            // SAFELY handle createdAt — works with Timestamp, Date, or string
+            if (userNameElement) userNameElement.textContent = displayName;
+
+            // Safely handle createdAt — works with Timestamp, Date, or string
             let memberSinceDate = new Date();
             if (userData.createdAt) {
                 if (typeof userData.createdAt.toDate === 'function') {
-                    // Firestore Timestamp
                     memberSinceDate = userData.createdAt.toDate();
                 } else if (userData.createdAt instanceof Date) {
-                    // JavaScript Date object
                     memberSinceDate = userData.createdAt;
                 } else if (typeof userData.createdAt === 'string') {
-                    // ISO string format
                     memberSinceDate = new Date(userData.createdAt);
                 }
             }
@@ -203,8 +208,8 @@ async function loadProfileData(user) {
                 userAvatarElement.src = `https://www.gravatar.com/avatar/${emailHash}?d=identicon&s=32`;
             }
 
-            const totalSaved = Math.floor(Math.random() * 500) + 100;
-            animateCounter(totalSavedElement, totalSaved, 1500);
+            // Total saved is still in HTML but no longer used — we leave it as-is for safety
+            // No need to animate it since it's not shown anymore
         }, 500);
 
     } catch (error) {
@@ -227,11 +232,9 @@ async function loadProfileData(user) {
 
 // Load purchase history with safe date parsing
 async function loadPurchaseHistory(userId) {
-    try {
-        if (!db) {
-            throw new Error('Firestore not initialized');
-        }
+    if (!purchasesListElement || !noPurchasesElement || !db) return;
 
+    try {
         const purchasesRef = collection(db, "purchases");
         const q = query(purchasesRef, where("userId", "==", userId));
         const querySnapshot = await getDocs(q);
@@ -262,7 +265,7 @@ async function loadPurchaseHistory(userId) {
     }
 }
 
-// Create enhanced purchase card with safe date handling
+// Create enhanced purchase card — NO savings field!
 function createEnhancedPurchaseCard(purchase, index) {
     const card = document.createElement('div');
     card.className = 'purchase-card';
@@ -270,7 +273,7 @@ function createEnhancedPurchaseCard(purchase, index) {
     card.setAttribute('data-aos', 'fade-up');
     card.setAttribute('data-aos-delay', index * 100);
 
-    // SAFELY parse purchaseDate — supports Timestamp, Date, or string
+    // Safely parse purchaseDate — supports Timestamp, Date, or string
     let purchaseDate = new Date();
     if (purchase.purchaseDate) {
         if (typeof purchase.purchaseDate.toDate === 'function') {
@@ -311,7 +314,6 @@ function createEnhancedPurchaseCard(purchase, index) {
         <div class="purchase-details">
             <p><strong>Order ID:</strong> <span>${purchase.orderId || 'N/A'}</span></p>
             <p><strong>Price:</strong> <span style="color: var(--success);">${purchase.price || '0.00'}</span></p>
-            <p><strong>Savings:</strong> <span style="color: var(--accent);">${(purchase.savings || (Math.random() * 50 + 10)).toFixed(2)}</span></p>
             ${purchase.accountDetails ? `
             <div class="account-info">
                 <h4><i class="fas fa-user-shield"></i> Account Details</h4>
@@ -319,34 +321,19 @@ function createEnhancedPurchaseCard(purchase, index) {
                     <p>
                         <strong>Email:</strong> 
                         <span>${purchase.accountDetails.email || 'N/A'}</span>
-                        <button class="copy-btn" onclick="copyToClipboard('${purchase.accountDetails.email || ''}')" title="Copy email">
+                        <button class="copy-btn" title="Copy email">
                             <i class="fas fa-copy"></i>
                         </button>
                     </p>
                     <p>
                         <strong>Password:</strong> 
                         <span>${purchase.accountDetails.password || 'N/A'}</span>
-                        <button class="copy-btn" onclick="copyToClipboard('${purchase.accountDetails.password || ''}')" title="Copy password">
+                        <button class="copy-btn" title="Copy password">
                             <i class="fas fa-copy"></i>
                         </button>
                     </p>
                 </div>
             </div>` : ''}
-        </div>
-        <div class="purchase-actions">
-            ${purchase.status === 'completed' ? `
-            <button class="btn-action view-btn" onclick="viewPurchaseDetails('${purchase.orderId || 'N/A'}')">
-                <i class="fas fa-eye"></i> View Details
-            </button>
-            <button class="btn-action download-btn" onclick="downloadPurchase('${purchase.orderId || 'N/A'}')">
-                <i class="fas fa-download"></i> Download
-            </button>
-            <button class="btn-action view-btn" onclick="sharePurchase('${purchase.orderId || 'N/A'}')" style="background: var(--gradient-secondary);">
-                <i class="fas fa-share-alt"></i> Share
-            </button>` : `
-            <button class="btn-action processing-btn" disabled>
-                <i class="fas fa-spinner"></i> Processing...
-            </button>`}
         </div>
     `;
     return card;
@@ -400,8 +387,9 @@ function getEnhancedProductDetails(productId) {
     };
 }
 
-// Copy to clipboard
+// Copy to clipboard — improved with fallback
 window.copyToClipboard = function(text) {
+    if (!text) return;
     navigator.clipboard.writeText(text).then(() => {
         showNotification('Copied to clipboard!', 'success');
     }).catch(() => {
@@ -414,6 +402,24 @@ window.copyToClipboard = function(text) {
         showNotification('Copied to clipboard!', 'success');
     });
 };
+
+// Event delegation for all .btn-action buttons
+if (purchasesListElement) {
+    purchasesListElement.addEventListener('click', (e) => {
+        const btn = e.target.closest('.btn-action');
+        if (!btn) return;
+
+        const orderId = btn.getAttribute('data-order-id');
+
+        if (btn.classList.contains('view-btn')) {
+            viewPurchaseDetails(orderId);
+        } else if (btn.classList.contains('download-btn')) {
+            downloadPurchase(orderId);
+        } else if (btn.classList.contains('share-btn')) {
+            sharePurchase(orderId);
+        }
+    });
+}
 
 // View purchase details
 window.viewPurchaseDetails = function(orderId) {
@@ -452,6 +458,7 @@ function initializeProfileAnimations() {
             item.classList.add('fade-in');
         }, index * 200);
     });
+
     const interactiveElements = document.querySelectorAll('.interactive-hover');
     interactiveElements.forEach(element => {
         element.addEventListener('mouseenter', () => {
@@ -461,6 +468,7 @@ function initializeProfileAnimations() {
             element.style.transform = 'translateY(0) scale(1)';
         });
     });
+
     const buttons = document.querySelectorAll('.action-btn, .btn-action');
     buttons.forEach(button => {
         button.addEventListener('click', createRippleEffect);
@@ -491,7 +499,7 @@ function createRippleEffect(e) {
     setTimeout(() => ripple.remove(), 600);
 }
 
-// Button event handlers
+// Button event handlers — all guarded
 if (changePasswordButton) {
     changePasswordButton.addEventListener('click', async () => {
         const user = auth.currentUser;
@@ -529,11 +537,13 @@ if (editProfileButton) {
             showNotification('Please login to edit profile', 'error');
             return;
         }
-        const newName = prompt('Enter your new name:', profileNameElement.textContent);
+        const newName = prompt('Enter your new name:', profileNameElement?.textContent || '');
         if (newName && newName.trim()) {
             try {
                 await setDoc(doc(db, "users", user.uid), { name: newName.trim() }, { merge: true });
                 showNotification('Profile updated successfully!', 'success');
+                editProfileButton.classList.add('editing');
+                setTimeout(() => editProfileButton.classList.remove('editing'), 800);
                 await loadProfileData(user);
             } catch (error) {
                 console.error("Error updating profile:", error);
@@ -578,7 +588,7 @@ if (signOutButton) {
     });
 }
 
-// Add smooth scrolling to anchor links
+// Add smooth scrolling for anchor links
 document.querySelectorAll('a[href^="#"]').forEach(anchor => {
     anchor.addEventListener('click', function (e) {
         e.preventDefault();
@@ -615,11 +625,11 @@ document.querySelectorAll('.stat-item, .purchase-card, .action-btn').forEach(el 
     observer.observe(el);
 });
 
-// Add keyboard navigation support
+// Keyboard navigation
 document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {
-        navToggle.classList.remove('active');
-        navLinks.classList.remove('active');
+        navToggle?.classList.remove('active');
+        navLinks?.classList.remove('active');
     }
 });
 
@@ -648,8 +658,10 @@ window.addEventListener('resize', () => {
     resizeTimer = setTimeout(() => {
         if (Math.abs(window.innerWidth - window.lastWidth) > 100) {
             const particles = document.getElementById('particles');
-            particles.innerHTML = '';
-            createParticles();
+            if (particles) {
+                particles.innerHTML = '';
+                createParticles();
+            }
             window.lastWidth = window.innerWidth;
         }
     }, 250);
@@ -670,7 +682,7 @@ window.addEventListener('load', () => {
     main.style.animation = 'fadeInUp 0.8s ease-out';
 });
 
-// Additional styles
+// Additional styles — ensures ripple keyframes exist
 const additionalStyles = document.createElement('style');
 additionalStyles.textContent = `
     @keyframes ripple {
@@ -680,10 +692,7 @@ additionalStyles.textContent = `
     body { opacity: 0; transition: opacity 0.3s ease-in-out; }
     .fade-in { animation: fadeInUp 0.6s ease-out forwards; }
     .loading-shimmer {
-        background: linear-gradient(90deg, 
-            rgba(255,255,255,0.1) 0%, 
-            rgba(255,255,255,0.2) 50%, 
-            rgba(255,255,255,0.1) 100%);
+        background: linear-gradient(90deg, rgba(255,255,255,0.1) 0%, rgba(255,255,255,0.2) 50%, rgba(255,255,255,0.1) 100%);
         background-size: 200% 100%;
         animation: shimmer 1.5s infinite;
     }
@@ -692,7 +701,7 @@ additionalStyles.textContent = `
         100% { background-position: 200% 0; }
     }
     @keyframes fadeInUp {
-        from { opacity: 0; transform: translateY(20px); }
+        from { opacity: 0; transform: translateY(30px); }
         to { opacity: 1; transform: translateY(0); }
     }
     .action-btn .action-description {
@@ -724,4 +733,16 @@ additionalStyles.textContent = `
 `;
 document.head.appendChild(additionalStyles);
 
-console.log('Enhanced Profile Page Initialized Successfully!');
+// Copy-to-clipboard for account details (now uses delegated event)
+document.addEventListener('click', (e) => {
+    const copyBtn = e.target.closest('.copy-btn');
+    if (!copyBtn) return;
+
+    const span = copyBtn.parentElement.querySelector('span');
+    if (!span) return;
+
+    const text = span.textContent.trim();
+    copyToClipboard(text);
+});
+
+console.log('✅ Enhanced Profile Page Initialized Successfully!');

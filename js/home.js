@@ -130,7 +130,7 @@ function showNotification(message, type) {
         setTimeout(() => {
             document.body.removeChild(notification);
         }, 300);
-    }, 4000);
+    }, 3000);
 }
 
 
